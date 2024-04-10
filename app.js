@@ -59,5 +59,8 @@ app.use(mongosanitize());
 // routes
 // http://localhost:3000/v1/auth/login
 app.use(routes);
+app.use("/", (req, res) => {
+  res.status(200).send("hi");
+});
 
 module.exports = app;

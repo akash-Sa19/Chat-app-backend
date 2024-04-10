@@ -52,7 +52,7 @@ const userSchema = new mongoose.Schema({
     default: false,
   },
   otp: {
-    type: Number,
+    type: String,
   },
   otp_expiry_time: {
     type: Date,
@@ -60,11 +60,34 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.pre("save", async function (next) {
-  // only run this function if otp actually modified
-  if (!this.isModified("otp")) return next();
+  // Only run this function if password was actually modified
+  if (!this.isModified("otp") || !this.otp) return next();
 
-  // Hash the OTP with the ccost of 12
-  this.otp = await bcrypt.hash(this.otp, 12);
+  // Hash the otp with cost of 12
+  this.otp = await bcrypt.hash(this.otp.toString(), 12);
+
+  // console.log(this.otp.toString(), "FROM PRE SAVE HOOK");
+
+  next();
+});
+
+userSchema.pre("save", async function (next) {
+  // Only run this function if password was actually modified
+  if (!this.isModified("password") || !this.password) return next();
+
+  // Hash the password with cost of 12
+  this.password = await bcrypt.hash(this.password, 12);
+
+  //! Shift it to next hook // this.passwordChangedAt = Date.now() - 1000;
+
+  next();
+});
+
+userSchema.pre("save", function (next) {
+  if (!this.isModified("password") || this.isNew || !this.password)
+    return next();
+
+  this.passwordChangedAt = Date.now() - 1000;
   next();
 });
 
@@ -76,38 +99,37 @@ userSchema.methods.correctPassword = async function (
 };
 
 userSchema.methods.correctOTP = async function (
-  canditateOTP, // supplied by the user
+  candidateOTP, // supplied by the user
   userOTP // stored in the database
 ) {
-  return await bcrypt.compare(canditateOTP, userOTP);
+  return await bcrypt.compare(candidateOTP, userOTP);
 };
 
 userSchema.methods.createPasswordResetToken = function () {
-  // genrated random string
-  const randomString = crypto.randomBytes(32).toString("hex");
+  // generating random string
+  const resetToken = crypto.randomBytes(32).toString("hex");
 
   // if any-one has the access of the DB it can see the token and can try to reset password
   // that's why ->  for security resons we hash the token
   this.passwordResetToken = crypto
     .createHash("sha256")
-    .update(randomString)
+    .update(resetToken)
     .digest("hex");
 
-  this.passwordResetExpires = Date.now() + 10* 60 *1000 
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000;
 
-  return randomString;
+  return resetToken;
 };
 
-userSchema.methods.changedPasswordAfter = funtion (timestamp) {
+userSchema.methods.changedPasswordAfter = function (timestamp) {
   // timestamp is that time when new token was generated
-  // when the user log-in new password is generated 
+  // when the user log-in new password is generated
   // so timestamp > this.passwordChangedAt
 
-  // for example -> if someone is alredy logged in 
+  // for example -> if someone is alredy logged in
   // and someother person changed password all must logged-out of their account, and relogin with new password
-  return timestamp < this.passwordChangedAt
-
-}
+  return timestamp < this.passwordChangedAt;
+};
 
 const User = mongoose.model("User", userSchema);
 module.exports = User;

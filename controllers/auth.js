@@ -4,8 +4,11 @@ const crypto = require("crypto");
 
 // models
 const User = require("../models/user");
+// utils function
 const filterObj = require("../utils/filterObj");
 const { promisify } = require("util");
+// mail service
+const mailService = require("../services/mailer");
 
 const signToken = (userId) => jwt.sign({ userId }, process.env.JWT_SECRET);
 
@@ -71,16 +74,25 @@ exports.sendOTP = async (req, res, next) => {
 
   const otp_expiry_time = Date.now() + 10 * 60 * 1000; // 10 mins after otp is sent
 
-  await User.findByIdAndUpdate(userId, {
-    otp: new_otp,
+  const user = await User.findByIdAndUpdate(userId, {
     otp_expiry_time,
   });
+  user.otp = new_otp.toString();
+  await user.save({ new: true, validateModifiedOnly: true });
 
   // TODO: send the email to the user
+  mailService.sendEmail({
+    from: "contact@gamil.com",
+    to: "example@gamil.com",
+    subject: "OTP for tawk",
+    text: `your otp is ${new_otp}. This is valid for 10 Mins`,
+  });
 
   res.status(200).json({
     status: "success",
     message: "OTP sent successfully",
+    // ! below - do not use in production
+    otp: new_otp,
   });
 };
 
@@ -92,11 +104,12 @@ exports.verifyOTP = async (req, res, next) => {
     email,
     // this otp_expiry_time must be greater than current time -> then it will return user
     // if not null will be returned
+
     otp_expiry_time: { $gt: Date.now() },
   });
 
   if (!user) {
-    res.status(400).json({
+    return res.status(404).json({
       status: "error",
       message: "Email is Invalid or OTP expired",
     });
@@ -107,6 +120,7 @@ exports.verifyOTP = async (req, res, next) => {
       status: "error",
       message: "OTP is incorrect",
     });
+    return;
   }
 
   // OTP is correct
@@ -128,15 +142,16 @@ exports.login = async (req, res, next) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    res.status(400).json({
+    return res.status(400).json({
       status: "error",
       message: "Both email and password is required",
     });
   }
-  const user = User.findOne({ email: email }).select("+password");
+
+  const user = await User.findOne({ email: email }).select("+password");
 
   if (!user || !(await user.correctPassword(password, user.password))) {
-    res.status(400).json({
+    return res.status(404).json({
       status: "error",
       message: "Email or Password is incorrect",
     });
@@ -144,8 +159,8 @@ exports.login = async (req, res, next) => {
 
   const token = signToken(user._id);
 
-  res.status(200).json({
-    status: "",
+  return res.status(200).json({
+    status: "success",
     message: "Logged in successfully",
     token,
   });
@@ -191,26 +206,30 @@ exports.protect = async (req, res, next) => {
 };
 
 exports.forgotPassword = async (req, res, next) => {
-  // 1) get user email
+  // get user email
   const user = await User.findOne({ email: req.body.email });
 
   if (!user) {
-    return res.status(400).json({
+    return res.status(404).json({
       status: "error",
       message: "There is no user with given email address",
     });
   }
 
   const resetToken = user.createPasswordResetToken();
+  await user.save({ validateBeforeSave: false });
 
-  const resetURL = `https://tawk.com/auth/reset-password/code=${resetToken}`;
+  // const resetURL = `https://tawk.com/auth/reset-password/code=${resetToken}`;
 
   try {
     // todo => send email with reset url
+    console.log(resetToken);
 
-    res.status(200).json({
+    return res.status(200).json({
       status: "success",
       message: "Reset password link send to email",
+      // ! below -> donot use this code in production
+      resetToken: resetToken,
     });
   } catch (error) {
     user.passwordResetToken = undefined;
@@ -227,9 +246,10 @@ exports.forgotPassword = async (req, res, next) => {
 };
 
 exports.resetPassword = async (req, res, next) => {
+  // .update(rep.params.code)
   const hashedToken = crypto
     .createHash("sha256")
-    .update(rep.params.code)
+    .update(req.body.token)
     .digest("hex");
 
   const user = await User.findOne({
