@@ -5,9 +5,11 @@ dotenv.config({ path: "./config.env" });
 // DB
 const mongoose = require("mongoose");
 // node
-const http = require("http");
+const http = require("node:http");
+const path = require("node:path");
 // model
 const FriendRequest = require("./models/friendRequest");
+const User = require("./models/user");
 // socket.io
 const { Server } = require("socket.io");
 
@@ -54,7 +56,7 @@ io.on("connection", async (socket) => {
 
   if (Boolean(user_id)) {
     // left here -> work for tomorrow
-    await User.findByIdAndUpdate(user_id, { socket_id });
+    await User.findByIdAndUpdate(user_id, { socket_id, status: "Online" });
   }
 
   // We can write our socket event listeners here...
@@ -109,7 +111,53 @@ io.on("connection", async (socket) => {
       message: "Friend Request Accepted",
     });
 
-    socket.on("end", function () {
+    socket.on("text_message", (data) => {
+      console.log("Recived Message", data);
+
+      // data : {to, from, text}
+
+      // create a new conversation if it doesn't exist yet or add new messagee to the message list
+
+      // save to db
+
+      // emit icoming_message -> to reciving user
+
+      // emit outgoing_message -> from sending user
+    });
+
+    socket.on("file_message", (data) => {
+      console.log("Recived File", data);
+
+      // data: {to, from, file context, file}
+
+      // get the file extension
+
+      const fileExtension = path.extname(data.file.name);
+
+      // generate a unique filename
+      const fileName = `${Date.now()}_${Math.floor(
+        Math.random() * 10000
+      )}${fileExtension}`;
+
+      // upload to aws s3
+
+      // create a new conversation if it doesn't exist yet or add new messagee to the message list
+
+      // save to db
+
+      // emit icoming_message -> to reciving user
+
+      // emit outgoing_message -> from sending user
+    });
+
+    socket.on("end", async (data) => {
+      // find user by _id and set status to offline
+      if (data.user_id) {
+        await User.findByIdAndUpdate(data.user_id, { status: "Offline " });
+      }
+
+      // todo:  broadcast user disconnect
+
       console.log("Closing connection");
       socket.disconnect(0);
     });
