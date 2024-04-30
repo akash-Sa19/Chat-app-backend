@@ -1,3 +1,4 @@
+const FriendRequest = require("../models/friendRequest");
 const User = require("../models/user");
 const filterObj = require("../utils/filterObj");
 
@@ -41,5 +42,30 @@ exports.getUsers = async (req, res, next) => {
     status: "success",
     data: remaining_users,
     message: "User found successfully",
+  });
+};
+
+exports.getFriendRequests = async (req, res, next) => {
+  const requests = await FriendRequest.find({
+    recipient: req.user._id,
+  }).populate("sender", "firstName lastName _id");
+
+  res.status(200).json({
+    status: "success",
+    data: requests,
+    message: "Friend request found successfully",
+  });
+};
+
+exports.getFriends = async (req, res, next) => {
+  const this_user = await User.findById(req.user._id).populate(
+    "friends",
+    "_id firstName lastName"
+  );
+
+  res.status(200).json({
+    status: "success",
+    data: this_user.friends,
+    message: "Friends found successfully!",
   });
 };

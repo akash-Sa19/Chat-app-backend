@@ -1,6 +1,7 @@
 const { Schema, model } = require("mongoose");
 
 const requestSchema = new Schema({
+  // user that have send us friend request
   sender: {
     type: Schema.ObjectId,
     ref: "User",
