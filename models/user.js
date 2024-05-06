@@ -134,15 +134,25 @@ userSchema.methods.createPasswordResetToken = function () {
   return resetToken;
 };
 
-userSchema.methods.changedPasswordAfter = function (timestamp) {
+userSchema.methods.changedPasswordAfter = function (JWTTimeStamp) {
   // timestamp is that time when new token was generated
   // when the user log-in new password is generated
   // so timestamp > this.passwordChangedAt
 
   // for example -> if someone is alredy logged in
   // and someother person changed password all must logged-out of their account, and relogin with new password
-  return timestamp < this.passwordChangedAt;
+  return JWTTimeStamp < this.passwordChangedAt;
+  // if (this.passwordChangedAt) {
+  //   const changedTimeStamp = parseInt(
+  //     this.passwordChangedAt.getTime() / 1000,
+  //     10
+  //   );
+  //   return JWTTimeStamp < changedTimeStamp;
+  // }
+
+  // // FALSE MEANS NOT CHANGED
+  // return false;
 };
 
-const User = mongoose.model("User", userSchema);
+const User = new mongoose.model("User", userSchema);
 module.exports = User;

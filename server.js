@@ -10,6 +10,7 @@ const path = require("node:path");
 // model
 const FriendRequest = require("./models/friendRequest");
 const User = require("./models/user");
+const OneToOneMessage = require("./models/OneToOneMessage");
 // socket.io
 const { Server } = require("socket.io");
 
@@ -62,6 +63,7 @@ io.on("connection", async (socket) => {
   // We can write our socket event listeners here...
   socket.on("friend_request", async (data, callback) => {
     console.log(data.to);
+
     // data => {to, from}
 
     // data
@@ -110,60 +112,104 @@ io.on("connection", async (socket) => {
     io.to(reciver.socket_id).emit("request_accepted", {
       message: "Friend Request Accepted",
     });
+  });
 
-    socket.on("text_message", (data) => {
-      console.log("Recived Message", data);
+  socket.on("get_direct_conversations", async ({ user_id }, callback) => {
+    const existing_conversations = await OneToOneMessage.find({
+      participants: { $all: [user_id] },
+    }).populate("participants", "firstName lastName _id email status");
 
-      // data : {to, from, text}
+    console.log(existing_conversations);
 
-      // create a new conversation if it doesn't exist yet or add new messagee to the message list
+    callback(existing_conversations);
+  });
 
-      // save to db
+  socket.on("start_conversation", async (data) => {
+    // data : {to, from}
+    const { to, from } = data;
 
-      // emit icoming_message -> to reciving user
+    // check if there is any existing conversation between these users
+    const existing_conversation = await OneToOneMessage.find({
+      participants: { $size: 2, $all: [to, from] },
+    }).populate("participants", "firstName lastName _id email status");
 
-      // emit outgoing_message -> from sending user
-    });
+    console.log("Existing Conversation : ", existing_conversation[0]);
 
-    socket.on("file_message", (data) => {
-      console.log("Recived File", data);
+    // if no existing_conversation
+    if (existing_conversation.length === 0) {
+      let new_chat = await OneToOneMessage.create({
+        participants: [to, from],
+      });
 
-      // data: {to, from, file context, file}
+      new_chat = await OneToOneMessage.findById(new_chat._id).populate(
+        "participants",
+        "firstName lastName _id email status"
+      );
 
-      // get the file extension
+      console.log(new_chat);
+      socket.emit("start_chat", new_chat);
+    }
 
-      const fileExtension = path.extname(data.file.name);
+    // if there is existing_conversation
+    else {
+      socket.emit("open_chat", existing_conversation[0]);
+    }
+  });
 
-      // generate a unique filename
-      const fileName = `${Date.now()}_${Math.floor(
-        Math.random() * 10000
-      )}${fileExtension}`;
+  socket.on("text_message", (data) => {
+    console.log("Recived Message", data);
 
-      // upload to aws s3
+    // data : {to, from, text}
 
-      // create a new conversation if it doesn't exist yet or add new messagee to the message list
+    // create a new conversation if it doesn't exist yet or add new messagee to the message list
 
-      // save to db
+    // save to db
 
-      // emit icoming_message -> to reciving user
+    // emit icoming_message -> to reciving user
 
-      // emit outgoing_message -> from sending user
-    });
+    // emit outgoing_message -> from sending user
+  });
 
-    socket.on("end", async (data) => {
-      // find user by _id and set status to offline
-      if (data.user_id) {
-        await User.findByIdAndUpdate(data.user_id, { status: "Offline " });
-      }
+  socket.on("file_message", (data) => {
+    console.log("Recived File", data);
 
-      // todo:  broadcast user disconnect
+    // data: {to, from, file context, file}
 
-      console.log("Closing connection");
-      socket.disconnect(0);
-    });
+    // get the file extension
+
+    const fileExtension = path.extname(data.file.name);
+
+    // generate a unique filename
+    const fileName = `${Date.now()}_${Math.floor(
+      Math.random() * 10000
+    )}${fileExtension}`;
+
+    // upload to aws s3
+
+    // create a new conversation if it doesn't exist yet or add new messagee to the message list
+
+    // save to db
+
+    // emit icoming_message -> to reciving user
+
+    // emit outgoing_message -> from sending user
+  });
+
+  socket.on("end", async (data) => {
+    // find user by _id and set status to offline
+    if (data.user_id) {
+      await User.findByIdAndUpdate(data.user_id, { status: "Offline " });
+    }
+
+    // todo:  broadcast user disconnect
+
+    console.log("Closing connection");
+    socket.disconnect(0);
   });
 });
 
+// ----------------------------------
+// server process
 process.on("uncaughtException", (err) => {
   console.log(err);
   console.log("UNCAUGHT Exception! Shutting down...");

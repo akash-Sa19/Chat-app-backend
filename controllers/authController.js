@@ -12,6 +12,8 @@ const mailService = require("../services/mailer");
 
 const signToken = (userId) => jwt.sign({ userId }, process.env.JWT_SECRET);
 
+// ---------------------------------------------------------------------------
+
 // Signup => register -> sendOTP -> verifyOTP
 // https://api.tawk.com/auth/register
 
@@ -172,13 +174,15 @@ exports.protect = async (req, res, next) => {
   let token;
   if (
     req.headers.authorization &&
-    req.headers.authorization.startWith("Bearer")
+    req.headers.authorization.startsWith("Bearer")
   ) {
     token = req.headers.authorization.split(" ")[1];
   } else if (req.cookies.jwt) {
     token = req.cookies.jwt;
-  } else {
-    return res.status(400).json({
+  }
+
+  if (!token) {
+    return res.status(401).json({
       status: "error",
       message: "You are not logged-in! please log in to get access",
     });
@@ -186,9 +190,10 @@ exports.protect = async (req, res, next) => {
 
   // verification of token
   const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  // console.log(decoded);
 
   // check if user still exists
-  const this_user = User.findById(decoded.userId);
+  const this_user = await User.findById(decoded.userId);
   if (!this_user) {
     return res.status(400).json({
       status: "error",
@@ -196,13 +201,14 @@ exports.protect = async (req, res, next) => {
     });
   }
 
-  // ckeck if user changed their password after token is issued
+  // check if user changed their password after token is issued
   if (this_user.changedPasswordAfter(decoded.iat)) {
     res.status(400).json({
       status: "error",
       message: "User recenty updated password! Please login again",
     });
   }
+  // console.log(this_user);
   req.user = this_user;
   next();
 };
